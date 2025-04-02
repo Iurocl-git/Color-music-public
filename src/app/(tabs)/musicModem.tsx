@@ -1,3 +1,4 @@
+import { NormalizationMode, setNormalizationMode as setNorMode } from 'expo-audio-capture';
 import React, { useState } from 'react';
 import { Platform, View, Text, TouchableOpacity, Image, Button, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -14,10 +15,11 @@ import { useWebSocketStore } from '@/store';
 const captureMods =
   Platform.OS !== 'ios'
     ? [
-        { id: 0, name: 'Запись' },
-        { id: 1, name: 'Захват' },
+        { id: 0, name: 'Recording' },
+        { id: 1, name: 'Capture' },
       ]
-    : [{ id: 0, name: 'Запись' }];
+    : [{ id: 0, name: 'Recording' }];
+
 const enum enumModes {
   One_Zone,
   Three_Zone,
@@ -26,35 +28,44 @@ const enum enumModes {
   Rainbow_Line,
   Raindrop,
 }
+type NormalizationModeArray = { id: NormalizationMode; name: string };
+const normalizationModes: NormalizationModeArray[] = [
+  { id: 'default', name: 'Default' },
+  { id: 'log', name: 'Logarithmic' },
+  { id: 'adaptive', name: 'Adaptive' },
+];
 
+// Define a mapping from enum mode keys to their names and specific codes
 const modes = {
-  [enumModes.One_Zone]: { name: 'Одна зона', code: 5 },
-  [enumModes.Three_Zone]: { name: 'Три зоны', code: 4 },
-  [enumModes.Five_Zone]: { name: 'Пять зон', code: 9 },
-  [enumModes.Raindrop]: { name: 'Капли', code: 6 },
-  [enumModes.Line]: { name: 'Линия', code: 7 },
-  [enumModes.Rainbow_Line]: { name: 'Линия радуга', code: 8 },
+  [enumModes.One_Zone]: { name: 'One Zone', code: 5 },
+  [enumModes.Three_Zone]: { name: 'Three Zones', code: 4 },
+  [enumModes.Five_Zone]: { name: 'Five Zones', code: 9 },
+  [enumModes.Raindrop]: { name: 'Raindrops', code: 6 },
+  [enumModes.Line]: { name: 'Line', code: 7 },
+  [enumModes.Rainbow_Line]: { name: 'Rainbow Line', code: 8 },
 };
 
 const modesArray = [
-  { id: enumModes.One_Zone, name: 'Одна зона' },
-  { id: enumModes.Three_Zone, name: 'Три зоны' },
-  { id: enumModes.Five_Zone, name: 'Пять зон' },
-  { id: enumModes.Raindrop, name: 'Капли' },
-  { id: enumModes.Line, name: 'Линия' },
-  { id: enumModes.Rainbow_Line, name: 'Линия радуга' },
+  { id: enumModes.One_Zone, name: 'One Zone' },
+  { id: enumModes.Three_Zone, name: 'Three Zones' },
+  { id: enumModes.Five_Zone, name: 'Five Zones' },
+  { id: enumModes.Raindrop, name: 'Raindrops' },
+  { id: enumModes.Line, name: 'Line' },
+  { id: enumModes.Rainbow_Line, name: 'Rainbow Line' },
 ];
 
 export default function MusicModeScreen() {
   const setSocket = useWebSocketStore((state) => state.setSocket);
   const socket = useWebSocketStore((state) => state.socket);
   const ip = useWebSocketStore((state) => state.ip);
+  const secure = useWebSocketStore((state) => state.secure);
 
   const [isRecording, setIsRecording] = useState(false);
   const [capture, setCapture] = useState(false);
 
   const [mode, setMode] = useState<enumModes>(enumModes.Line);
-  const [audioMode, setAudioMode] = useState('Захват');
+  const [audioMode, setAudioMode] = useState('Capture');
+  const [normalizationMode, setNormalizationMode] = useState<NormalizationMode>('default');
 
   const [sensitivity, setSensitivity] = useState(100);
   const [pulseDecay, setPulseDecay] = useState(5);
@@ -65,6 +76,13 @@ export default function MusicModeScreen() {
   const [sensitivityLOW, setSensitivityLOW] = useState(100);
   const [sensitivityMID, setSensitivityMID] = useState(100);
   const [sensitivityHIGH, setSensitivityHIGH] = useState(100);
+  const [audioTrashHold, setAudioTrashHold] = useState(3000);
+  const [maxDrops, setMaxDrops] = useState(15);
+  const [dropSpeed, setDropSpeed] = useState(0.1);
+  const [dropInterval, setDropInterval] = useState(100);
+  const [centerZone, setCenterZone] = useState(20);
+  const [dropWidth, setDropWidth] = useState(8);
+  const [fadeStyle, setFadeStyle] = useState(1);
 
   const [detailedConfiguration, setDetailedConfiguration] = useState(false);
 
@@ -96,11 +114,10 @@ export default function MusicModeScreen() {
   };
 
   const sendParameter = (type: enumParameters, value: number) => {
-    // const parameter = value;
-    // const valueS = parameter.toString();
+    // console.log(type);
     const message = JSON.stringify({
       command: 'parameterChange',
-      name: parameters[type].name,
+      name: type,
       value,
     });
     sendMessage(message);
@@ -110,7 +127,7 @@ export default function MusicModeScreen() {
     if (socket?.readyState === WebSocket.OPEN) {
       socket.send(message);
     } else {
-      console.error('WebSocket не подключен');
+      console.error('WebSocket is not connected');
     }
   };
 
@@ -124,7 +141,8 @@ export default function MusicModeScreen() {
       //   HFA: high,
       // });
       // console.log(data);
-      // if (data.mid > 50) console.log(data.mid);
+      // if (data.mid > 50 || data.low > 50 || data.high > 50)
+      //   console.log(`Sent: low: ${data.low}, mid: ${data.mid}, high: ${data.high}`);
       // sendMessage(message);
     } catch (error) {
       console.error('Error handling FFT data:', error);
@@ -135,17 +153,17 @@ export default function MusicModeScreen() {
     <SafeAreaView className="flex-1 bg-gray-800 p-4">
       <ScrollView>
         <View className="mb-8 flex-row justify-between">
-          <Text className="text-2xl font-bold text-white">Режим светомузыки</Text>
-          <TouchableOpacity onPress={() => setSocket(connectWebSocket(ip))}>
+          <Text className="text-2xl font-bold text-white">Music Visualization Mode</Text>
+          <TouchableOpacity onPress={() => setSocket(connectWebSocket(ip, secure))}>
             <Image source={icons.refresh} className="h-10 w-12" resizeMode="contain" />
             {/*<Image source={{uri: "@/assets/icons/refresh_img.png"}} className="w-12 h-10" resizeMode="cover" />*/}
           </TouchableOpacity>
         </View>
 
-        {/* Выбор режима */}
+        {/* Select mode */}
         <View className="mb-8">
           <View className="flex-row items-center justify-between">
-            <Text className="mb-2 mt-4 text-lg font-semibold text-white ">Выберите режим</Text>
+            <Text className="mb-2 mt-4 text-lg font-semibold text-white ">Select Mode</Text>
             <CustomCheckbox
               label="Detailed"
               isChecked={detailedConfiguration}
@@ -154,45 +172,64 @@ export default function MusicModeScreen() {
           </View>
 
           <View>
-            <Text className="mb-2 ml-4 text-base font-semibold text-white">Режим ленты</Text>
-            <DropDown
-              header="Select mode"
-              list={modesArray}
-              onChange={(_, selected_id) => {
-                setMode(selected_id);
-                sendMode(selected_id);
-              }}
-            />
-            <Text className="mb-2 ml-4 mt-8 text-base font-semibold text-white">
-              Выберите режим записи
-            </Text>
-
-            <DropDown
-              header={audioMode || 'Select mode'}
-              list={captureMods}
-              onChange={(selected) => {
-                setAudioMode(selected);
-              }}
-            />
+            <>
+              <Text className="mb-2 ml-4 text-base font-semibold text-white">LED Strip Mode</Text>
+              <DropDown
+                header="Select mode"
+                list={modesArray}
+                onChange={(_, selected_id) => {
+                  setMode(selected_id);
+                  sendMode(selected_id);
+                }}
+              />
+            </>
+            <>
+              <Text className="mb-2 ml-4 mt-8 text-base font-semibold text-white">
+                Select Recording Mode
+              </Text>
+              <DropDown
+                header={audioMode || 'Select mode'}
+                list={captureMods}
+                onChange={(selected) => {
+                  setAudioMode(selected);
+                }}
+              />
+            </>
+            <>
+              <Text className="mb-2 ml-4 mt-8 text-base font-semibold text-white">
+                Select normalization mode
+              </Text>
+              <DropDown
+                header="Default"
+                list={normalizationModes}
+                onChange={(_, selected_id) => {
+                  console.log(selected_id);
+                  // @ts-ignore
+                  setNorMode(selected_id);
+                  // @ts-ignore
+                  setNormalizationMode(selected_id);
+                }}
+              />
+            </>
           </View>
         </View>
 
-        {audioMode === 'Захват' && (
+        {audioMode === 'Capture' && (
           <View>
             <View className="mt-4">
               <Button
-                title={capture ? 'Остановить захват' : 'Начать захват'}
+                title={capture ? 'Stop Capture' : 'Start Capture'}
                 onPress={capture ? stopAudioCapture : startAudioCapture}
               />
             </View>
           </View>
         )}
 
-        {audioMode === 'Запись' && (
+        {audioMode === 'Recording' && (
           <View>
             <View className="mt-8">
               <Button
-                title={isRecording ? 'Остановить запись' : 'Начать запись'}
+                title={isRecording ? 'Stop Recording' : 'Start Recording'}
                 onPress={isRecording ? () => setIsRecording(false) : () => setIsRecording(true)}
               />
             </View>
@@ -210,8 +247,9 @@ export default function MusicModeScreen() {
             value={brightness}
             onValueChange={(value) => {
               sendParameter(enumParameters.Brightness, value);
-              setBrightness(value);
             }}
+            onSlidingComplete={setBrightness}
+            isPercent
           />
           {/* Управление чувствительностью */}
           <CustomSlider
@@ -224,8 +262,9 @@ export default function MusicModeScreen() {
             containerStyle="mt-8"
             onValueChange={(value) => {
               sendParameter(enumParameters.Sensitivity, value / 100);
-              setSensitivity(value);
             }}
+            onSlidingComplete={setSensitivity}
+            isPercent
           />
           {(mode === enumModes.One_Zone ||
             mode === enumModes.Three_Zone ||
@@ -240,8 +279,9 @@ export default function MusicModeScreen() {
               containerStyle="mt-8"
               onValueChange={(value) => {
                 sendParameter(enumParameters.PulseDecay, 1 - value / 100);
-                setPulseDecay(value);
               }}
+              onSlidingComplete={setPulseDecay}
+              isPercent
             />
           )}
 
@@ -255,8 +295,9 @@ export default function MusicModeScreen() {
                 value={rainbowSpeed}
                 onValueChange={(value) => {
                   sendParameter(enumParameters.RainbowSpeed, value / 100);
-                  setRainbowSpeed(value);
                 }}
+                onSlidingComplete={setRainbowSpeed}
+                isPercent
               />
               <CustomSlider
                 containerStyle="mt-8"
@@ -266,8 +307,9 @@ export default function MusicModeScreen() {
                 value={waveWidth}
                 onValueChange={(value) => {
                   sendParameter(enumParameters.WaveWidth, value);
-                  setWaveWidth(value);
                 }}
+                onSlidingComplete={setWaveWidth}
+                isPercent
               />
             </>
           )}
@@ -284,9 +326,78 @@ export default function MusicModeScreen() {
               containerStyle="mt-8"
               onValueChange={(value) => {
                 sendParameter(enumParameters.LedStart, value);
-                setLedStart(value);
               }}
+              onSlidingComplete={setLedStart}
             />
+          )}
+
+          {mode === enumModes.Raindrop && (
+            <>
+              <Text className="mb-2 ml-4 mt-8 text-base font-semibold text-white">Fade Style</Text>
+              <DropDown
+                header="Select Style"
+                list={parameters[enumParameters.FadeStyle].options}
+                onChange={(_, selected_id) => {
+                  setFadeStyle(selected_id);
+                  sendParameter(enumParameters.FadeStyle, selected_id);
+                }}
+              />
+
+              <CustomSlider
+                title={parameters[enumParameters.MaxDrops].name}
+                minimumValue={parameters[enumParameters.MaxDrops].min}
+                maximumValue={parameters[enumParameters.MaxDrops].max}
+                step={1}
+                value={maxDrops}
+                containerStyle="mt-8"
+                onValueChange={(val) => sendParameter(enumParameters.MaxDrops, val)}
+                onSlidingComplete={setMaxDrops}
+              />
+
+              <CustomSlider
+                title={parameters[enumParameters.DropSpeed].name}
+                minimumValue={parameters[enumParameters.DropSpeed].min}
+                maximumValue={parameters[enumParameters.DropSpeed].max}
+                step={0.01}
+                value={dropSpeed}
+                containerStyle="mt-8"
+                onValueChange={(val) => sendParameter(enumParameters.DropSpeed, val)}
+                onSlidingComplete={setDropSpeed}
+              />
+
+              <CustomSlider
+                title={parameters[enumParameters.DropInterval].name}
+                minimumValue={parameters[enumParameters.DropInterval].min}
+                maximumValue={parameters[enumParameters.DropInterval].max}
+                step={10}
+                value={dropInterval}
+                containerStyle="mt-8"
+                onValueChange={(val) => sendParameter(enumParameters.DropInterval, val)}
+                onSlidingComplete={setDropInterval}
+              />
+
+              <CustomSlider
+                title={parameters[enumParameters.CenterZone].name}
+                minimumValue={parameters[enumParameters.CenterZone].min}
+                maximumValue={parameters[enumParameters.CenterZone].max}
+                step={1}
+                value={centerZone}
+                containerStyle="mt-8"
+                onValueChange={(val) => sendParameter(enumParameters.CenterZone, val)}
+                onSlidingComplete={setCenterZone}
+              />
+
+              <CustomSlider
+                title={parameters[enumParameters.DropWidth].name}
+                minimumValue={parameters[enumParameters.DropWidth].min}
+                maximumValue={parameters[enumParameters.DropWidth].max}
+                step={1}
+                value={dropWidth}
+                containerStyle="mt-8"
+                onValueChange={(val) => sendParameter(enumParameters.DropWidth, val)}
+                onSlidingComplete={setDropWidth}
+              />
+            </>
           )}
 
           {detailedConfiguration && (
@@ -299,8 +410,9 @@ export default function MusicModeScreen() {
                 containerStyle="mt-8"
                 onValueChange={(value) => {
                   sendParameter(enumParameters.SensitivityLOW, value / 100);
-                  setSensitivityLOW(value);
                 }}
+                onSlidingComplete={setSensitivityLOW}
+                isPercent
               />
               <CustomSlider
                 title={parameters[enumParameters.SensitivityMID].name}
@@ -310,8 +422,9 @@ export default function MusicModeScreen() {
                 containerStyle="mt-8"
                 onValueChange={(value) => {
                   sendParameter(enumParameters.SensitivityMID, value / 100);
-                  setSensitivityMID(value);
                 }}
+                onSlidingComplete={setSensitivityMID}
+                isPercent
               />
               <CustomSlider
                 title={parameters[enumParameters.SensitivityHIGH].name}
@@ -321,11 +434,25 @@ export default function MusicModeScreen() {
                 containerStyle="mt-8"
                 onValueChange={(value) => {
                   sendParameter(enumParameters.SensitivityHIGH, value / 100);
-                  setSensitivityHIGH(value);
                 }}
+                onSlidingComplete={setSensitivityHIGH}
+                isPercent
+              />
+
+              <CustomSlider
+                title={parameters[enumParameters.AudioTrashHold].name}
+                minimumValue={parameters[enumParameters.AudioTrashHold].min}
+                maximumValue={parameters[enumParameters.AudioTrashHold].max}
+                value={audioTrashHold}
+                containerStyle="mt-8"
+                onValueChange={(value) => {
+                  sendParameter(enumParameters.AudioTrashHold, value);
+                }}
+                onSlidingComplete={setAudioTrashHold}
               />
             </>
           )}
+          <View className="mb-16" />
         </View>
       </ScrollView>
     </SafeAreaView>

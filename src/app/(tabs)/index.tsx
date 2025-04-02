@@ -1,9 +1,7 @@
-import { useState } from 'react';
+import React, { useState } from 'react';
 import { View, Text, TouchableOpacity, ScrollView, Image } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import ColorPicker from 'react-native-wheel-color-picker';
-
-// import '~/global.css';
 
 import DropDown from '@/components/DropDown';
 import InputField from '@/components/InputField';
@@ -12,6 +10,7 @@ import { icons } from '@/constants';
 import { enumParameters, parameters } from '@/constants/Parameters';
 import { connectWebSocket } from '@/scripts/web_socket';
 import { useWebSocketStore } from '@/store';
+import CustomCheckbox from '@/components/CustomCheckbox';
 
 const enum enumModes {
   Static = 0,
@@ -36,17 +35,19 @@ const Home = () => {
   const [strobeFrequency, setStrobeFrequency] = useState(100);
   const [color, setColor] = useState('');
   const [mode, setMode] = useState<enumModes>(enumModes.Static);
-  const [socketIP, setSocketIP] = useState('192.168.190.120');
+  const [socketIP, setSocketIP] = useState('192.168.85.51');
 
   const setSocket = useWebSocketStore((state) => state.setSocket);
   const socket = useWebSocketStore((state) => state.socket);
   const setIP = useWebSocketStore((state) => state.setIP);
+  const secure = useWebSocketStore((state) => state.secure);
+  const setSecure = useWebSocketStore((state) => state.setSecure);
 
   const hexToRGB = (hex: string) => {
-    // Удаляем символ #, если он есть
+    // Remove the '#' symbol if it exists
     hex = hex.replace(/^#/, '');
 
-    // Преобразуем строку в отдельные компоненты RGB
+    // Convert the string into separate RGB components
     const bigint = parseInt(hex, 16);
     const r = (bigint >> 16) & 255;
     const g = (bigint >> 8) & 255;
@@ -66,6 +67,7 @@ const Home = () => {
   };
 
   const sendMode = (mode: number) => {
+    // console.log(mode);
     const message = JSON.stringify({
       command: 'changeMode',
       mode,
@@ -82,6 +84,7 @@ const Home = () => {
   };
 
   const sendParameter = (type: enumParameters, value: number) => {
+    // console.log(type);
     const message = JSON.stringify({
       command: 'parameterChange',
       name: type,
@@ -95,22 +98,30 @@ const Home = () => {
       <ScrollView>
         <View className="p-4">
           <View className="mb-8 flex-row justify-between">
-            <Text className="text-2xl font-bold text-white">Управление LED лентой</Text>
-            <TouchableOpacity onPress={() => setSocket(connectWebSocket(socketIP))}>
+            <Text className="text-2xl font-bold text-white">LED Strip Control</Text>
+            <TouchableOpacity onPress={() => setSocket(connectWebSocket(socketIP, secure))}>
               <Image source={icons.refresh} className="h-10 w-12" resizeMode="contain" />
               {/*<Image source={{uri: "@/assets/icons/refresh_img.png"}} className="w-12 h-10" resizeMode="cover" />*/}
             </TouchableOpacity>
           </View>
 
           <View>
+            <View className="flex-row items-center justify-between">
+              <Text className="mb-2 mt-4 text-lg font-semibold text-white ">IP address or domain</Text>
+              <CustomCheckbox
+                label="Secure"
+                isChecked={secure}
+                onChange={(checked) => setSecure(checked)}
+              />
+            </View>
             <InputField
-              label="IP address"
-              placeholder="192.168.190.120"
+              // label="IP address or domain"
+              placeholder="192.168.85.51"
               value={socketIP}
               containerStyle="bg-orange-400 border-0 "
               inputStyle="p-3"
               labelStyle="text-white ml-2 text-lg"
-              keyboardType="numeric"
+              // keyboardType="numeric"
               onChangeText={(ip) => {
                 setSocketIP(ip);
                 setIP(ip);
@@ -119,7 +130,7 @@ const Home = () => {
           </View>
           {/* Dropdown select */}
           <View className="mb-8">
-            <Text className="mb-4 mt-4 text-lg font-semibold text-white">Режимы работы</Text>
+            <Text className="mb-4 mt-4 text-lg font-semibold text-white">Operating Modes</Text>
             <DropDown
               header="Select mode"
               list={modes}
@@ -132,7 +143,7 @@ const Home = () => {
 
           {/* Индивидуальный выбор цвета */}
           <View className="h-[70vh] w-full flex-1">
-            <Text className="mb-2 text-lg font-semibold text-white">Выберите цвет color</Text>
+            <Text className="mb-2 text-lg font-semibold text-white">Select Color</Text>
             <ColorPicker
               thumbSize={50}
               sliderSize={50}
@@ -154,8 +165,8 @@ const Home = () => {
                     onPress={() => {
                       if (color === newColor) {
                         const colorValue = parseInt(newColor.replace('#', ''), 16);
-                        const newValue = Math.max(colorValue - 1, 0); // Убедимся, что значение не меньше 0
-                        // Преобразуем обратно в шестнадцатеричный формат
+                        const newValue = Math.max(colorValue - 1, 0);
+                        // Convert back to hexadecimal format
                         setColor(`#${newValue.toString(16).padStart(6, '0').toUpperCase()}`);
                         // setColor(`${newColor}`);
                       } else setColor(`${newColor}`);
@@ -167,7 +178,6 @@ const Home = () => {
             </View>
           </View>
 
-          {/* Управление яркостью */}
           <CustomSlider
             title={parameters[enumParameters.Brightness].name}
             minimumValue={parameters[enumParameters.Brightness].min}
@@ -177,8 +187,9 @@ const Home = () => {
             value={brightness}
             onValueChange={(value) => {
               sendParameter(enumParameters.Brightness, value);
-              setBrightness(value);
             }}
+            onSlidingComplete={setBrightness}
+            isPercent
           />
 
           <CustomSlider
@@ -190,8 +201,9 @@ const Home = () => {
             value={changeSpeed}
             onValueChange={(value) => {
               sendParameter(enumParameters.ChangeSpeed, value / 100);
-              setChangeSpeed(value);
             }}
+            onSlidingComplete={setChangeSpeed}
+            isPercent
           />
 
           <View className="mb-4">
@@ -204,8 +216,9 @@ const Home = () => {
                 value={flickerSpeed}
                 onValueChange={(value) => {
                   sendParameter(enumParameters.FlickerSpeed, value / 100);
-                  setFlickerSpeed(value);
                 }}
+                onSlidingComplete={setFlickerSpeed}
+                isPercent
               />
             )}
 
@@ -219,8 +232,9 @@ const Home = () => {
                   value={rainbowSpeed}
                   onValueChange={(value) => {
                     sendParameter(enumParameters.RainbowSpeed, value / 100);
-                    setRainbowSpeed(value);
                   }}
+                  onSlidingComplete={setRainbowSpeed}
+                  isPercent
                 />
                 <CustomSlider
                   containerStyle="mt-8"
@@ -230,8 +244,9 @@ const Home = () => {
                   value={waveWidth}
                   onValueChange={(value) => {
                     sendParameter(enumParameters.WaveWidth, value);
-                    setWaveWidth(value);
                   }}
+                  onSlidingComplete={setWaveWidth}
+                  isPercent
                 />
               </>
             )}
@@ -245,14 +260,12 @@ const Home = () => {
                 value={strobeFrequency}
                 onValueChange={(value) => {
                   sendParameter(enumParameters.StrobeFrequency, value / 10);
-                  setStrobeFrequency(value);
                 }}
+                onSlidingComplete={setStrobeFrequency}
+                isPercent
               />
             )}
           </View>
-
-          {/*<Text className="text-white">Диапазон цветов</Text>*/}
-          {/* Здесь можно добавить компонент для выбора диапазона цветов */}
           <View className="mb-20" />
         </View>
       </ScrollView>

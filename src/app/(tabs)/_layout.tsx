@@ -13,12 +13,12 @@ export default function TabLayout() {
   const socket = useWebSocketStore((state) => state.socket);
 
   useEffect(() => {
-    // Подключаемся к WebSocket серверу при загрузке компонента
+    // Connect to the WebSocket server when the component loads
 
     const new_socket = connectWebSocket();
     setSocket(new_socket);
 
-    // Закрываем WebSocket соединение при размонтировании компонента
+    // Close the WebSocket connection when the component unmounts
     return () => {
       if (socket) {
         socket.close();

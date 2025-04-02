@@ -10,7 +10,32 @@
     "experiments": {
       "tsconfigPaths": true
     },
-    "plugins": [],
+    "plugins": [
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "usesCleartextTraffic": true
+          },
+          "ios": {
+            "infoPlist": {
+              "NSAppTransportSecurity": {
+                "NSExceptionDomains": {
+                  "192.168.85.51": {
+                    "NSExceptionAllowsInsecureHTTPLoads": true,
+                    "NSIncludesSubdomains": true
+                  },
+                  "colormusicesp32.local": {
+                    "NSExceptionAllowsInsecureHTTPLoads": true,
+                    "NSIncludesSubdomains": true
+                  }
+                }
+              }
+            }
+          }
+        }
+      ]
+    ],
     "newArchEnabled": true,
     "orientation": "portrait",
     "icon": "./src/assets/images/icon.png",
@@ -28,11 +53,17 @@
       "bundleIdentifier": "com.iurocl.Colormusic"
     },
     "android": {
+      "usesCleartextTraffic": true,
       "adaptiveIcon": {
         "foregroundImage": "./src/assets/images/adaptive-icon.png",
         "backgroundColor": "#ffffff"
       },
       "package": "com.iurocl.Colormusic"
+    },
+    "extra": {
+      "eas": {
+        "projectId": "53166ae9-3534-4086-ab69-5752546f3107"
+      }
     }
   }
 }
